@@ -39,8 +39,8 @@ type Distribution struct {
 	hasDecayed bool
 }
 
-func (d *Distribution) GetNMostProbable(N int) error {
-	data, err := GetNMostProbable(d.Name, N)
+func (d *Distribution) GetNMostProbable(N int, offset int) error {
+	data, err := GetNMostProbable(d.Name, N, offset)
 	if err != nil || len(data) != 3 {
 		return fmt.Errorf("Could not fetch data for %s: %s", d.Name, err)
 	}

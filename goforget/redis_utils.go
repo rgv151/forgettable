@@ -150,11 +150,11 @@ func GetField(distribution, field string) ([]interface{}, error) {
 	return data, err
 }
 
-func GetNMostProbable(distribution string, N int) ([]interface{}, error) {
+func GetNMostProbable(distribution string, N int, offset int) ([]interface{}, error) {
 	rdb := redisServer.GetConnection()
 
 	rdb.Send("MULTI")
-	rdb.Send("ZREVRANGEBYSCORE", distribution, "+INF", "-INF", "WITHSCORES", "LIMIT", 0, N)
+	rdb.Send("ZREVRANGEBYSCORE", distribution, "+INF", "-INF", "WITHSCORES", "LIMIT", offset, N)
 	rdb.Send("GET", fmt.Sprintf("%s.%s", distribution, "_Z"))
 	rdb.Send("GET", fmt.Sprintf("%s.%s", distribution, "_T"))
 	data, err := redis.MultiBulk(rdb.Do("EXEC"))

@@ -198,12 +198,24 @@ func NMostProbableHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	offset_raw := reqParams.Get("offset")
+	var offset int
+	if offset_raw == "" {
+		offset = 0
+	} else {
+		offset, err = strconv.Atoi(offset_raw)
+		if err != nil {
+			HttpError(w, 500, "INVALID_ARG_OFFSET")
+			return
+		}
+	}
+
 	result := Distribution{
 		Name:  distribution,
 		Rate:  rate,
 		Prune: *pruneDist,
 	}
-	result.GetNMostProbable(N)
+	result.GetNMostProbable(N, offset)
 	result.Decay()
 
 	HttpResponse(w, 200, result)
