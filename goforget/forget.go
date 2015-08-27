@@ -4,15 +4,17 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 var (
-	VERSION     = "0.4.3"
+	VERSION     = "0.4.5"
 	showVersion = flag.Bool("version", false, "print version string")
 	httpAddress = flag.String("http", ":8080", "HTTP service address (e.g., ':8080')")
 	redisHost   = flag.String("redis-host", "", "Redis host in the form host:port:db.")
@@ -123,8 +125,8 @@ func GetHandler(w http.ResponseWriter, r *http.Request) {
 		HttpError(w, 500, "MISSING_ARG_DISTRIBUTION")
 		return
 	}
-	field := reqParams.Get("field")
-	if field == "" {
+	fields, ok := reqParams["field"]
+	if !ok || len(fields) == 0 {
 		HttpError(w, 500, "MISSING_ARG_FIELD")
 		return
 	}
@@ -145,7 +147,7 @@ func GetHandler(w http.ResponseWriter, r *http.Request) {
 		Rate:  rate,
 		Prune: *pruneDist,
 	}
-	err = result.GetField(field)
+	err = result.GetField(fields...)
 	if err != nil {
 		HttpError(w, 500, "COULD_NOT_RETRIEVE_FIELD")
 		return
@@ -161,6 +163,7 @@ func DBSizeHandler(w http.ResponseWriter, r *http.Request) {
 	size, err := DBSize()
 	if err != nil {
 		HttpError(w, 500, "COULD_NOT_READ_SIZE")
+		return
 	}
 	HttpResponse(w, 200, size/3)
 }
@@ -199,24 +202,12 @@ func NMostProbableHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	offset_raw := reqParams.Get("offset")
-	var offset int
-	if offset_raw == "" {
-		offset = 0
-	} else {
-		offset, err = strconv.Atoi(offset_raw)
-		if err != nil {
-			HttpError(w, 500, "INVALID_ARG_OFFSET")
-			return
-		}
-	}
-
 	result := Distribution{
 		Name:  distribution,
 		Rate:  rate,
 		Prune: *pruneDist,
 	}
-	result.GetNMostProbable(N, offset)
+	result.GetNMostProbable(N)
 	result.Decay()
 
 	HttpResponse(w, 200, result)
@@ -240,15 +231,14 @@ func main() {
 		return
 	}
 
-	// redisServer = NewRedisServer(*redisHost, *nWorkers*2)
+	rand.Seed(time.Now().UnixNano())
+	redisServer = NewRedisServerFromUri("redis://localhost:6379/1")
 	if *redisUri != "" {
 		// if a redis URI exists was specified, parse it
 		redisServer = NewRedisServerFromUri(*redisUri)
 	} else if *redisHost != "" {
 		// for legacy mode
 		redisServer = NewRedisServerFromRaw(*redisHost)
-	} else {
-		redisServer = NewRedisServerFromUri("redis://localhost:6379/1")
 	}
 
 	// create the connection pool
@@ -256,7 +246,7 @@ func main() {
 
 	log.Printf("Starting %d update worker(s)", *nWorkers)
 	workerWaitGroup := sync.WaitGroup{}
-	updateChan = make(chan *Distribution, 10) //25 * *nWorkers)
+	updateChan = make(chan *Distribution, *nWorkers)
 	for i := 0; i < *nWorkers; i++ {
 		workerWaitGroup.Add(1)
 		go func(idx int) {

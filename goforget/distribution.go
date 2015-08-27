@@ -53,20 +53,25 @@ func (d *Distribution) GetNMostProbable(N int, offset int) error {
 	return nil
 }
 
-func (d *Distribution) GetField(field string) error {
-	data, err := GetField(d.Name, field)
+func (d *Distribution) GetField(fields ...string) error {
+	data, err := GetField(d.Name, fields...)
 
-	if err != nil || len(data) != 3 {
+	N := len(fields)
+	if err != nil || len(data) != 2+N {
 		return fmt.Errorf("Could not retrieve field")
 	}
 
-	count, _ := redis.Int(data[0], nil)
-	Z, _ := redis.Int(data[1], nil)
-	T, _ := redis.Int(data[2], nil)
+	Z, _ := redis.Int(data[N], nil)
+	T, _ := redis.Int(data[N+1], nil)
 
 	d.Z = Z
 	d.T = T
-	d.Data = map[string]*Value{field: &Value{Count: count}}
+	d.Data = make(map[string]*Value)
+	var count int
+	for i, field := range fields {
+		count, _ = redis.Int(data[i], nil)
+		d.Data[field] = &Value{Count: count}
+	}
 	d.calcProbabilities()
 
 	return nil
@@ -147,8 +152,9 @@ func (d *Distribution) calcProbabilities() {
 
 func (d *Distribution) Decay() {
 	startingZ := d.Z
+	now := time.Now()
 	for k, v := range d.Data {
-		l := Decay(v.Count, d.Z, d.T, d.Rate)
+		l := DecayTime(v.Count, d.Z, d.T, d.Rate, now)
 		if l >= d.Data[k].Count {
 			if d.Prune {
 				l = d.Data[k].Count
